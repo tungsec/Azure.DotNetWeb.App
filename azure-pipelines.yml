@@ -12,6 +12,10 @@ variables:
   buildConfiguration: 'Release'
 
 steps:
+- task: WhiteSource@21
+  inputs:
+    cwd: '$(System.DefaultWorkingDirectory)'
+    projectName: 'DotNetWebApp'
 - task: DotNetCoreCLI@2
   inputs:
     command: 'publish'
