@@ -23,8 +23,7 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      pip3 install trufflehog
-      trufflehog --regex --entropy=False $(System.DefaultWorkingDirectory)
+      trufflehog --entropy=NO --regex $(System.DefaultWorkingDirectory)
 
 - task: DockerInstaller@0
   displayName: "Install Docker"
