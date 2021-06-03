@@ -13,15 +13,25 @@ variables:
 
 steps:
 - task: WhiteSource@21
+  displayName: "WhiteSource Scan"
   inputs:
     cwd: '$(System.DefaultWorkingDirectory)'
     projectName: 'DotNetWebApp'
 
+- task: Bash@3
+  displayName: "TruffleHog Scan"
+  inputs:
+    targetType: 'inline'
+    script: |
+      pip3 install trufflehog
+      trufflehog --regex --entropy=False $(System.DefaultWorkingDirectory)
 - task: DockerInstaller@0
+  displayName: "Install Docker"
   inputs:
     dockerVersion: '17.09.0-ce'
 
 - task: Docker@2
+  displayName: "Build and Publish Docker Image"
   inputs:
     containerRegistry: 'devsecopz container registry'
     repository: 'dotnetwebapp'
