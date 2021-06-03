@@ -1,20 +1,5 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
-
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
-
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
-
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
-
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+# App Build Pipeline
+* A repository for application source code
+* Every git-push to the repository initiates a Build Pipeline-run
+* The build pipeline typically builds the app, test it, build docker images and perhaps run integration tests. If everything has succeeded, it also push the image to an image registry. The last task in the pipeline would be to git-clone the application configuration respository and updated the image reference to the newly built image.
+* The result of this pipeline is that it either failed on a certain task, or that it succeeded. And if it succeeded on the mainline (not a feature-branch) you probably want to initiate a Deployment Pipeline, typically with a git-push to the application configuration repo.

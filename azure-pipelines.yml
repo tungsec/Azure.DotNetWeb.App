@@ -16,6 +16,7 @@ steps:
   inputs:
     cwd: '$(System.DefaultWorkingDirectory)'
     projectName: 'DotNetWebApp'
+    
 - task: DotNetCoreCLI@2
   inputs:
     command: 'publish'
