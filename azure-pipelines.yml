@@ -22,9 +22,12 @@ steps:
   displayName: "TruffleHog Scan"
   inputs:
     targetType: 'inline'
-    script: trufflehog --entropy=NO --regex $(System.DefaultWorkingDirectory)
+    script: |
+      which trufflehog
+      echo $PATH
+      env
+      trufflehog --entropy=NO --regex $(System.DefaultWorkingDirectory)
     failOnStderr: true
-
 - task: DockerInstaller@0
   displayName: "Install Docker"
   inputs:
