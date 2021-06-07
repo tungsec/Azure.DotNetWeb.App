@@ -19,14 +19,10 @@ steps:
     projectName: 'DotNetWebApp'
 
 - task: Bash@3
-  displayName: "TruffleHog Scan"
+  displayName: "Gitleaks Scan"
   inputs:
     targetType: 'inline'
-    script: |
-      which trufflehog
-      echo $PATH
-      env
-      /home/tverkuij/.local/bin/trufflehog --entropy=NO --regex $(System.DefaultWorkingDirectory)
+    script: gitleaks --config_path=.gitleaks.toml --path=. --verbose --redact
     failOnStderr: true
 - task: DockerInstaller@0
   displayName: "Install Docker"
