@@ -28,7 +28,7 @@ steps:
   displayName: "Gitleaks Scan"
   inputs:
     targetType: 'inline'
-    script: docker run -v ${PWD}:/my-repo zricethezav/gitleaks:latest --path="/my-repo" --config_path=/my-repo/.gitleaks.toml --verbose --redact
+    script: docker run -v ${PWD}:/repo zricethezav/gitleaks:latest --path="/repo" --config-path=/repo/.gitleaks.toml --verbose --redact
 
 
 - task: Docker@2
