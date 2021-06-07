@@ -26,7 +26,7 @@ steps:
       which trufflehog
       echo $PATH
       env
-      trufflehog --entropy=NO --regex $(System.DefaultWorkingDirectory)
+      /home/tverkuij/.local/bin/trufflehog --entropy=NO --regex $(System.DefaultWorkingDirectory)
     failOnStderr: true
 - task: DockerInstaller@0
   displayName: "Install Docker"
