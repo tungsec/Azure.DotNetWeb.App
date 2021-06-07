@@ -11,6 +11,7 @@ namespace DotNetWebApp.Pages
     public class IndexModel : PageModel
     {
         private readonly ILogger<IndexModel> _logger;
+        private readonly string AWS_KEY = "AKIALALEMEL33243OLIAE";
 
         public IndexModel(ILogger<IndexModel> logger)
         {
