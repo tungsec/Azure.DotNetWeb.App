@@ -18,16 +18,18 @@ steps:
     cwd: '$(System.DefaultWorkingDirectory)'
     projectName: 'DotNetWebApp'
 
-- task: Bash@3
-  displayName: "Gitleaks Scan"
-  inputs:
-    targetType: 'inline'
-    script: gitleaks --config_path=.gitleaks.toml --path=. --verbose --redact
-    failOnStderr: true
 - task: DockerInstaller@0
   displayName: "Install Docker"
   inputs:
     dockerVersion: '17.09.0-ce'
+
+
+- task: Bash@3
+  displayName: "Gitleaks Scan"
+  inputs:
+    targetType: 'inline'
+    script: docker run -v ${PWD}:/my-repo zricethezav/gitleaks:latest --path="/my-repo" --config_path=/my-repo/.gitleaks.toml --verbose --redact
+
 
 - task: Docker@2
   displayName: "Build and Publish Docker Image"
