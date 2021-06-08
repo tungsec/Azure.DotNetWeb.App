@@ -1,27 +1,118 @@
 trigger:
-- ci
+- main
 
 pool: Default
 
-variables:
-  buildConfiguration: 'Release'
+stages:
+  - stage: Build
+    displayName: Build stage
+    jobs:
+      - job: Build
+        displayName: Build
+        pool: Default
+        steps:
+          - task: DockerInstaller@0
+            displayName: "Install Docker"
+            inputs:
+              dockerVersion: '17.09.0-ce'
 
-steps:
-- task: WhiteSource@21
-  displayName: "WhiteSource Scan"
-  inputs:
-    cwd: '$(System.DefaultWorkingDirectory)'
-    projectName: 'DotNetWebApp'
+          - task: Docker@2
+            displayName: "Build and Publish Docker Image"
+            inputs:
+              containerRegistry: 'devsecopz container registry'
+              repository: 'dotnetwebapp'
+              command: 'buildAndPush'
+              Dockerfile: '**/Dockerfile'
+  
+  - stage: Test
+    displayName: Test image
+    dependsOn: Build
+    jobs:
+      - job: Test
+        displayName: Test
+        pool: Default
+        steps:
+        - task: AzureRmWebAppDeployment@4
+          displayName: 'Azure App Service Test'
+          inputs:
+            azureSubscription: 'Azure live.nl'
+            appType: webAppContainer
+            WebAppName: app-devsecopz-test
+            DockerNamespace: devsecopz.azurecr.io
+            DockerRepository: dotnetwebapp
+            DockerImageTag: '$(Build.BuildId)'
+        - bash: |
+            chmod -R 777  ./
+            docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t https://app-devsecopz-test.azurewebsites.net -g gen.conf -x zap-report.xml -r zap-report.html -J zap-report.json
+            true
+          displayName: 'Run OWASP ZAP'
+        - bash: |
+            sudo npm install -g handlebars-cmd
+            
+            cat <<EOF > nunit-template.hbs
+            <?xml version="1.0" encoding="utf-8" standalone="no" ?>
+            <test-run id="2"
+                      name="OWASP ZAP Test"
+                      start-time="{{[@generated]}}">
+                {{#each site}}
+                <test-suite id="{{@index}}"
+                            type="Assembly"
+                            name="{{[@name]}}"
+                            result="Failed"
+                            failed="{{alerts.length}}">
+                    {{#each alerts}}<test-case id="{{@index}}"
+                                                name="{{alert}}"
+                                                result="Failed"
+                                                fullname="{{alert}}"
+                                                time="1">
+                        <failure>
+                            <message>
+                                <![CDATA[{{{desc}}}]]>
+                            </message>
+                            <stack-trace>
+                                <![CDATA[
+                                Solution:
+                                {{{solution}}}
+            
+                                Reference:
+                                {{{reference}}}
+            
+                                instances:{{#each instances}}
+                                * {{uri}}
+                                - {{method}}
+                                {{#if evidence}}- {{{evidence}}}{{/if}}
+                                {{/each}}]]>
+                            </stack-trace>
+                        </failure>
+                    </test-case>
+                    {{/each}}
+                </test-suite>
+                {{/each}}
+            </test-run>
+          displayName: 'Create Template'
+        - bash: |
+            printf "Current Directory\n"
+            pwd
+            printf "Directory Contents\n"
+            ls
+            cat zap-report.json
+          displayName: 'Verify Generated Files'
+        - bash: 'handlebars zap-report.json < nunit-template.hbs > test-results.xml'
+          displayName: 'Transform ZAP report to NUnit Format'
+        - task: PublishTestResults@2
+          displayName: 'Publish Test Results test-results.xml'
+          inputs:
+            testResultsFormat: NUnit
+            testResultsFiles: 'test-results.xml'
 
-- task: DockerInstaller@0
-  displayName: "Install Docker"
-  inputs:
-    dockerVersion: '17.09.0-ce'
-
-- task: Docker@2
-  displayName: "Build and Publish Docker Image"
-  inputs:
-    containerRegistry: 'devsecopz container registry'
-    repository: 'dotnetwebapp'
-    command: 'buildAndPush'
-    Dockerfile: '**/Dockerfile'
+  - stage: Release
+    displayName: Release
+    dependsOn: Test
+    jobs:
+      - job: Release
+        displayName: Release by updating image reference
+        pool: Default
+        steps:
+        - bash: |
+            echo "Release: $(Build.BuildId)"
+          displayName: 'Display the release'
