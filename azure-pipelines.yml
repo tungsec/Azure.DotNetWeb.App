@@ -7,18 +7,11 @@ variables:
   - group: devops-variables
 
 stages:
-  - stage: DisplayBuildID
-    displayName: Display Build ID
-    jobs:
-      - job: DisplayBuildIDJob
-        pool: Default
-        steps:
-          - bash: echo $(Build.BuildId)
   - stage: Build
-    displayName: Build stage
+    displayName: Build
     jobs:
       - job: Build
-        displayName: Build
+        displayName: Build Docker image 
         pool: Default
         steps:
           - task: DockerInstaller@0
@@ -35,27 +28,26 @@ stages:
               Dockerfile: '**/Dockerfile'
   
   - stage: Test
-    displayName: Test image
+    displayName: Test
     dependsOn: Build
     jobs:
-      - job: Test
-        displayName: Test
+      - job: Test 
+        displayName: Deploy and test image
         pool: Default
         steps:
-        - task: AzureRmWebAppDeployment@4
-          displayName: 'Azure App Service Test'
-          inputs:
-            azureSubscription: 'Azure live.nl'
-            appType: webAppContainer
-            WebAppName: app-devsecopz-test
-            DockerNamespace: devsecopz.azurecr.io
-            DockerRepository: dotnetwebapp
-            DockerImageTag: '$(Build.BuildId)'
         - bash: |
             chmod -R 777  ./
-            docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t https://app-devsecopz-test.azurewebsites.net -g gen.conf -x zap-report.xml -r zap-report.html -J zap-report.json
+            docker network create zapnet
+            docker run --rm --net zapnet -d --name dotnetwebapp-$(Build.BuildId) devsecopz.azurecr.io/dotnetwebapp:$(Build.BuildId)
+            IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dotnetwebapp-$(Build.BuildId))
+            docker run --rm --net zapnet -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t http://$IP:80 -g gen.conf -x zap-report.xml -r zap-report.html -J zap-report.json
             true
           displayName: 'Run OWASP ZAP'
+        
+        - task: NodeTool@0
+          inputs:
+            versionSpec: '14.17.0' 
+        
         - bash: |
             sudo npm install -g handlebars-cmd
             
@@ -123,14 +115,24 @@ stages:
         displayName: Release by updating image reference
         pool: Default
         steps:
-        - bash: |
-            curl -sL https://aka.ms/InstallAzureCLIDeb | bash
-          displayName: 'Set the build release number in the variable group'
-        - bash: echo ${AZURE_DEVOPS_CLI_PAT} | az devops login --org $(System.TeamFoundationCollectionUri)
-          env:
-            AZURE_DEVOPS_CLI_PAT: $(System.AccessToken)
-          displayName: 'Login Azure DevOps Extension'
-        - bash: |
-            echo "Release: $(Build.BuildId)"
-            az pipelines variable-group variable update --group-id devops-variables --name release-id --value $(Build.BuildId)
+          # Update pip to latest
+        - bash: python -m pip install --upgrade pip
+          displayName: 'Upgrade pip'
+
+          # Update to latest Azure CLI version, min version required for Azure DevOps is 2.10.1
+        - bash: pip install --pre azure-cli --extra-index-url https://azurecliprod.blob.core.windows.net/edge
+          displayName: 'Upgrade Azure CLI'
+
+        # Install Azure DevOps extension
+        - bash: az extension add -n azure-devops
+          displayName: 'Install Azure DevOps extension'
+        
+        # Azure DevOps CLI extension call that does not require login or credentials
+        # since it configures the local environment
+        - bash: az devops configure --defaults organization=$(System.TeamFoundationCollectionUri) project=$(System.TeamProject) --use-git-aliases true
+          displayName: 'Set default Azure DevOps organization and project'
+    
+        - bash: | 
+            export AZURE_DEVOPS_EXT_PAT=$(PAT)
+            az pipelines variable-group variable update --group-id 1 --name release-id --value $(Build.BuildId)
           displayName: 'Set the build release number in the variable group'
