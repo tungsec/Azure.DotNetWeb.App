@@ -3,6 +3,9 @@ trigger:
 
 pool: Default
 
+variables:
+  - group: devops-variables
+
 stages:
   - stage: DisplayBuildID
     displayName: Display Build ID
@@ -122,4 +125,6 @@ stages:
         steps:
         - bash: |
             echo "Release: $(Build.BuildId)"
+            export AZURE_DEVOPS_EXT_PAT=$(PAT)
+            az pipelines variable-group variable update --group-id devops-variables --name release-id --value $(Build.BuildId)
           displayName: 'Display the release'
