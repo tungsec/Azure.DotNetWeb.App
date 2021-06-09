@@ -1,6 +1,6 @@
 trigger:
-- main
-
+  - main
+  
 pool: Default
 
 variables:
@@ -124,7 +124,13 @@ stages:
         pool: Default
         steps:
         - bash: |
+            curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+          displayName: 'Set the build release number in the variable group'
+        - bash: echo ${AZURE_DEVOPS_CLI_PAT} | az devops login --org $(System.TeamFoundationCollectionUri)
+          env:
+            AZURE_DEVOPS_CLI_PAT: $(System.AccessToken)
+          displayName: 'Login Azure DevOps Extension'
+        - bash: |
             echo "Release: $(Build.BuildId)"
-            export AZURE_DEVOPS_EXT_PAT=$(PAT)
             az pipelines variable-group variable update --group-id devops-variables --name release-id --value $(Build.BuildId)
-          displayName: 'Display the release'
+          displayName: 'Set the build release number in the variable group'
