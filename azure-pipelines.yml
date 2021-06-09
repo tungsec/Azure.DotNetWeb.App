@@ -4,6 +4,13 @@ trigger:
 pool: Default
 
 stages:
+  - stage: DisplayBuildID
+    displayName: Display Build ID
+    jobs:
+      - job: DisplayBuildIDJob
+        pool: Default
+        steps:
+          - bash: echo $(Build.BuildId)
   - stage: Build
     displayName: Build stage
     jobs:
