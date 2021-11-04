@@ -1,21 +1,28 @@
 trigger:
-- main
+  - main
 
+# Running on a self-hosted agent
 pool: Default
 
+# Using the variable group from Azure DevOps to retrieve secrets and ids
+variables:
+  - group: devops-variables
+
 stages:
+  # Build stage that uses docker to build and publish a docker image from the Dockerfile in the repo
   - stage: Build
-    displayName: Build stage
+    displayName: Build
     jobs:
       - job: Build
-        displayName: Build
+        displayName: Build Docker image 
         pool: Default
         steps:
+          # Install Docker since it is a dependency
           - task: DockerInstaller@0
             displayName: "Install Docker"
             inputs:
               dockerVersion: '17.09.0-ce'
-
+          # Building and Publishing the image to the Azure Container Registry
           - task: Docker@2
             displayName: "Build and Publish Docker Image"
             inputs:
@@ -23,88 +30,92 @@ stages:
               repository: 'dotnetwebapp'
               command: 'buildAndPush'
               Dockerfile: '**/Dockerfile'
-  
+  # Test stage where the image is dynamically tested
   - stage: Test
-    displayName: Test image
+    displayName: Test
     dependsOn: Build
     jobs:
-      - job: Test
-        displayName: Test
+      - job: Test 
+        displayName: Deploy and test image
         pool: Default
         steps:
-        - task: AzureRmWebAppDeployment@4
-          displayName: 'Azure App Service Test'
-          inputs:
-            azureSubscription: 'Azure live.nl'
-            appType: webAppContainer
-            WebAppName: app-devsecopz-test
-            DockerNamespace: devsecopz.azurecr.io
-            DockerRepository: dotnetwebapp
-            DockerImageTag: '$(Build.BuildId)'
-        - bash: |
-            chmod -R 777  ./
-            docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t https://app-devsecopz-test.azurewebsites.net -g gen.conf -x zap-report.xml -r zap-report.html -J zap-report.json
-            true
-          displayName: 'Run OWASP ZAP'
-        - bash: |
-            sudo npm install -g handlebars-cmd
-            
-            cat <<EOF > nunit-template.hbs
-            <?xml version="1.0" encoding="utf-8" standalone="no" ?>
-            <test-run id="2"
-                      name="OWASP ZAP Test"
-                      start-time="{{[@generated]}}">
-                {{#each site}}
-                <test-suite id="{{@index}}"
-                            type="Assembly"
-                            name="{{[@name]}}"
-                            result="Failed"
-                            failed="{{alerts.length}}">
-                    {{#each alerts}}<test-case id="{{@index}}"
-                                                name="{{alert}}"
-                                                result="Failed"
-                                                fullname="{{alert}}"
-                                                time="1">
-                        <failure>
-                            <message>
-                                <![CDATA[{{{desc}}}]]>
-                            </message>
-                            <stack-trace>
-                                <![CDATA[
-                                Solution:
-                                {{{solution}}}
-            
-                                Reference:
-                                {{{reference}}}
-            
-                                instances:{{#each instances}}
-                                * {{uri}}
-                                - {{method}}
-                                {{#if evidence}}- {{{evidence}}}{{/if}}
-                                {{/each}}]]>
-                            </stack-trace>
-                        </failure>
-                    </test-case>
-                    {{/each}}
-                </test-suite>
-                {{/each}}
-            </test-run>
-          displayName: 'Create Template'
-        - bash: |
-            printf "Current Directory\n"
-            pwd
-            printf "Directory Contents\n"
-            ls
-            cat zap-report.json
-          displayName: 'Verify Generated Files'
-        - bash: 'handlebars zap-report.json < nunit-template.hbs > test-results.xml'
-          displayName: 'Transform ZAP report to NUnit Format'
-        - task: PublishTestResults@2
-          displayName: 'Publish Test Results test-results.xml'
-          inputs:
-            testResultsFormat: NUnit
-            testResultsFiles: 'test-results.xml'
-
+          # Create a user-defined docker network and spin up 2 docker containers, one that hosts the image build in the previous stage
+          # another container that runs the OWASP ZAP tool to test the container that runs the app. The last true statement is neccessary to 
+          # prevent the OWASP ZAP result, returns a '1', failing the stage
+          - bash: |
+              chmod -R 777  ./
+              docker network create zapnet
+              docker run --rm --net zapnet -d --name dotnetwebapp-$(Build.BuildId) devsecopz.azurecr.io/dotnetwebapp:$(Build.BuildId)
+              IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dotnetwebapp-$(Build.BuildId))
+              docker run --rm --net zapnet -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t http://$IP:80 -g gen.conf -x zap-report.xml -r zap-report.html -J zap-report.json
+              true
+            displayName: 'Run OWASP ZAP'
+          # In later steps we need to run some npm install command so we need nodejs
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '14.17.0' 
+          # The next 4 steps are required to convert the ZAP output to a format that Azure DevOps understands
+          - bash: |
+              sudo npm install -g handlebars-cmd
+              
+              cat <<EOF > nunit-template.hbs
+              <?xml version="1.0" encoding="utf-8" standalone="no" ?>
+              <test-run id="2"
+                        name="OWASP ZAP Test"
+                        start-time="{{[@generated]}}">
+                  {{#each site}}
+                  <test-suite id="{{@index}}"
+                              type="Assembly"
+                              name="{{[@name]}}"
+                              result="Failed"
+                              failed="{{alerts.length}}">
+                      {{#each alerts}}<test-case id="{{@index}}"
+                                                  name="{{alert}}"
+                                                  result="Failed"
+                                                  fullname="{{alert}}"
+                                                  time="1">
+                          <failure>
+                              <message>
+                                  <![CDATA[{{{desc}}}]]>
+                              </message>
+                              <stack-trace>
+                                  <![CDATA[
+                                  Solution:
+                                  {{{solution}}}
+              
+                                  Reference:
+                                  {{{reference}}}
+              
+                                  instances:{{#each instances}}
+                                  * {{uri}}
+                                  - {{method}}
+                                  {{#if evidence}}- {{{evidence}}}{{/if}}
+                                  {{/each}}]]>
+                              </stack-trace>
+                          </failure>
+                      </test-case>
+                      {{/each}}
+                  </test-suite>
+                  {{/each}}
+              </test-run>
+            displayName: 'Create Template'
+          - bash: |
+              printf "Current Directory\n"
+              pwd
+              printf "Directory Contents\n"
+              ls
+              cat zap-report.json
+            displayName: 'Verify Generated Files'
+          - bash: 'handlebars zap-report.json < nunit-template.hbs > test-results.xml'
+            displayName: 'Transform ZAP report to NUnit Format'
+          # Publishing the ZAP results to Azure DevOps
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results test-results.xml'
+            inputs:
+              testResultsFormat: NUnit
+              testResultsFiles: 'test-results.xml'
+  
+  # Release stage that should require approval after the test stage has been inspected
   - stage: Release
     displayName: Release
     dependsOn: Test
@@ -113,6 +124,24 @@ stages:
         displayName: Release by updating image reference
         pool: Default
         steps:
-        - bash: |
-            echo "Release: $(Build.BuildId)"
-          displayName: 'Display the release'
+          # Update pip to latest
+        - bash: python -m pip install --upgrade pip
+          displayName: 'Upgrade pip'
+
+          # Update to latest Azure CLI version, min version required for Azure DevOps is 2.10.1
+        - bash: pip install --pre azure-cli --extra-index-url https://azurecliprod.blob.core.windows.net/edge
+          displayName: 'Upgrade Azure CLI'
+
+        # Install Azure DevOps extension
+        - bash: az extension add -n azure-devops
+          displayName: 'Install Azure DevOps extension'
+        
+        # Azure DevOps CLI extension call that does not require login or credentials
+        # since it configures the local environment
+        - bash: az devops configure --defaults organization=$(System.TeamFoundationCollectionUri) project=$(System.TeamProject) --use-git-aliases true
+          displayName: 'Set default Azure DevOps organization and project'
+    
+        - bash: | 
+            export AZURE_DEVOPS_EXT_PAT=$(PAT)
+            az pipelines variable-group variable update --group-id 1 --name release-id --value $(Build.BuildId)
+          displayName: 'Set the build release number in the variable group'
