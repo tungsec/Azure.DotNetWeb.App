@@ -10,8 +10,3 @@ repos:
     rev: 'v0.2'
     hooks:
     -   id: dotnet-format
-
-- repo: https://github.com/sirosen/check-jsonschema
-  rev: 0.6.0
-  hooks:
-    - id: check-azure-pipelines
