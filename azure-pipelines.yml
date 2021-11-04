@@ -30,6 +30,7 @@ stages:
               repository: 'dotnetwebapp'
               command: 'buildAndPush'
               Dockerfile: '**/Dockerfile'
+              
   # Test stage where the image is dynamically tested
   - stage: Test
     displayName: Test
@@ -50,6 +51,7 @@ stages:
               docker run --rm --net zapnet -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py -t http://$IP:80 -g gen.conf -x zap-report.xml -r zap-report.html -J zap-report.json
               true
             displayName: 'Run OWASP ZAP'
+
           # In later steps we need to run some npm install command so we need nodejs
           - task: NodeTool@0
             inputs:
